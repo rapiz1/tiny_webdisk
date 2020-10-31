@@ -2,7 +2,7 @@
 
 It's my toy project of writing a web server with epoll.
 
-DON'T TREAT ANY CODE HERE SERIOUSLY AND DON'T USE IT ON YOUR SERVER. Neither did I read the rfc nor any effort to make the code clean, efficent or clean were made.
+DON'T TREAT ANY CODE HERE SERIOUSLY AND DON'T USE IT ON YOUR SERVER. Neither did I read the rfc nor any effort were made to keep the code clean, efficent or safe.
 
 USAGE:
 
