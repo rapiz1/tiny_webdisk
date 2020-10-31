@@ -12,6 +12,7 @@ struct rio_t {
 };
 
 void rio_init(struct rio_t *rio, int fd);
+int rio_readn(struct rio_t *rio, char* dest, int n);
 int rio_readline(struct rio_t *rio, char* dest, int maxlen);
 
 #endif

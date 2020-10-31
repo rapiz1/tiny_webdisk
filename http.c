@@ -7,17 +7,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "logger.h"
 #include "rio.h"
 #include "sys.h"
 
 #define LINELEN (1 << 8)
+
+static void strip_crlf(char* s, int *l) {
+  if (*l != 0 && (s[*l-1] == '\n' || s[*l-1] == '\r')) {
+    s[--(*l)] = 0;
+  }
+}
 
 /*
   Get status code in string form
@@ -98,6 +106,7 @@ void* handle_conn(void* vfd) {
 
   char req[LINELEN];
   int reqlen = rio_readline(&rio, req, LINELEN);
+  info("%s", req);
 
   char pathname[LINELEN], version[LINELEN], method[LINELEN];
   if (sscanf(req, "%s %s %s", method, pathname, version) != 3) {
@@ -128,9 +137,57 @@ void* handle_conn(void* vfd) {
       sendfile(fd, file_fd, NULL, filesize);
     }
   } else if (strcasecmp("POST", method) == 0) {
+    int file_fd = open(pathname, O_RDWR | O_CREAT,
+                       S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+    
+    if (file_fd == -1) {
+      // if (errno == EACCES) {
+      response(fd, FORBIDDEN, 0, NULL);
+      warn("Failed to open the file %s", pathname);
+      //} else {
+    } else {
+      char opt[LINELEN];
+      char optVal[LINELEN];
+      int filesize = 0;
 
+      for (;;) {
+        // drain the header
+        reqlen = rio_readline(&rio, req, LINELEN);
+        strip_crlf(req, &reqlen);
+        info("%s (%d)", req, reqlen);
+        sscanf(req, "%s %s", opt, optVal);
+
+        if (strcasecmp(opt, "Content-Length:") == 0) {
+          sscanf(optVal, "%d", &filesize);
+        }
+
+        if (!reqlen) break;
+      }
+
+      info("filesize: %d", filesize);
+
+      if (filesize != 0) {
+        if (fallocate(file_fd, 0, 0, filesize) < 0) {
+          log_perror("fallocate");
+        }
+        else {
+          void* file_charrep =
+              mmap(NULL, filesize, PROT_READ | PROT_WRITE, MAP_SHARED, file_fd, 0);
+
+          if (file_charrep == MAP_FAILED) {
+            log_perror("mmap");
+          }
+
+          rio_readn(&rio, file_charrep, filesize);
+        }
+      }
+
+      close(file_fd);
+
+      response(fd, OK, 0, NULL);
+    }
   } else {
-    response(fd, FORBIDDEN, 0, NULL);
+    response(fd, BAD_REQUEST, 0, NULL);
     warn("Unsupported method %s", method);
     goto END;
   }

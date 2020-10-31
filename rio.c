@@ -12,7 +12,7 @@ void rio_init(struct rio_t *rio, int fd) {
 
 int rio_read(struct rio_t *rio, char *usrbuf, int n) {
   while (rio->cnt <= 0) {
-    rio->cnt = read(rio->fd, rio->buf_ptr, sizeof(rio->buf));
+    rio->cnt = read(rio->fd, rio->buf, sizeof(rio->buf));
     if (rio->cnt < 0) {
       if (errno != EINTR)
         return -1;
@@ -28,6 +28,17 @@ int rio_read(struct rio_t *rio, char *usrbuf, int n) {
   memcpy(usrbuf, rio->buf_ptr, cnt);
   rio->buf_ptr += cnt;
   rio->cnt -= cnt;
+  return cnt;
+}
+
+int rio_readn(struct rio_t *rio, char* dest, int n) {
+  int cnt = 0;
+  while (cnt < n) {
+    int once_cnt = rio_read(rio, dest, n - cnt);
+    if (once_cnt <= 0) break;
+    dest += once_cnt;
+    cnt += once_cnt; 
+  }
   return cnt;
 }
 
