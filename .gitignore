@@ -1,3 +1,4 @@
 *.o
 tiny_webdisk
 disk
+.vscode
