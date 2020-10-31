@@ -4,8 +4,7 @@ It's my toy project of writing a web server with epoll.
 
 DON'T TREAT ANY CODE HERE SERIOUSLY AND DON'T USE IT ON YOUR SERVER. Neither did I read the rfc nor any effort were made to keep the code clean, efficent or safe.
 
-USAGE:
-
+## Usage
 In terminal,
 ```
 mkdir disk
@@ -21,3 +20,7 @@ Via `GET /path/to/file` you will get `work_dir/path/to/file`. You can do this si
 And `POST /path/to/file` will upload the content to `work_dir/path/to/file`.
 
 No web interface for the POST usage. Use whatever tool you like.
+
+## License
+
+WTFPL
