@@ -81,7 +81,7 @@ static void response(int fd, int status_code, int content_length,
 
 /*
   Remove heading /
-  Fallback empty pathname to disk/index.html
+  Fallback empty pathname to index.html
 */
 static void standardize_pathname(char pathname[LINELEN]) {
   int len = strlen(pathname);
@@ -91,7 +91,7 @@ static void standardize_pathname(char pathname[LINELEN]) {
     }
   }
   if (!pathname[0]) {
-    strcpy(pathname, "disk/index.html");
+    strcpy(pathname, "index.html");
   }
 }
 
