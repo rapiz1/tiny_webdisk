@@ -1,4 +1,4 @@
-#include "main.h"
+#define _GNU_SOURCE
 
 #include <errno.h>
 #include <netdb.h>
@@ -113,7 +113,7 @@ int main() {
         Epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
 
         pthread_t p;
-        if (pthread_create(&p, NULL, handle_conn, (void *)client_fd) < 0) {
+        if (pthread_create(&p, NULL, handle_conn, (void *)(long long)client_fd) < 0) {
           error("pthread");
           exit(-1);
         }
