@@ -11,8 +11,7 @@ struct rio_t {
   char buf[RIO_BUF_LEN];
 };
 
-void rio_init(struct rio_t *rio);
-void rio_readn(struct rio_t *rio, int n, char* dest);
-void rio_readline(struct rio_t *rio, char* dest);
+void rio_init(struct rio_t *rio, int fd);
+int rio_readline(struct rio_t *rio, char* dest, int maxlen);
 
 #endif

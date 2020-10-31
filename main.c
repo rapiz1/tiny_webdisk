@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,8 +15,8 @@
 #include "logger.h"
 #include "sys.h"
 
-#define REQBUF (1<<10)
-#define CGIBUFF (1<<12)
+#define REQBUF (1 << 10)
+#define CGIBUFF (1 << 12)
 
 int open_serverfd(const char *port) {
   struct addrinfo *res = NULL;
@@ -37,6 +38,12 @@ int open_serverfd(const char *port) {
     error("socket: %s", strerror(errno));
     exit(-1);
   }
+  int reuse = 1;
+  status = setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&reuse,
+                   sizeof(int));
+  if (status != 0) {
+    log_perror("setsockopt");
+  }
 
   if ((status = bind(server_fd, res->ai_addr, res->ai_addrlen)) != 0) {
     error("bind: %s", strerror(errno));
@@ -50,29 +57,10 @@ int open_serverfd(const char *port) {
   return server_fd;
 }
 
-struct conn_stat {
-  char req_buf[REQBUF];
-  int req_buf_len;
-  char cgi_buf[CGIBUFF];
-  int cgi_buf_len;
-  int client_fd;
-  int cgi_fd;
-};
-
-struct conn_stat *conn_stat_create(int client_fd, int cgi_fd) {
-  struct conn_stat* stat = malloc(sizeof(struct conn_stat));
-  stat->req_buf_len = 0;
-  stat->cgi_buf_len = 0;
-  stat->client_fd = client_fd;
-  stat->cgi_fd = cgi_fd;
-  return stat;
-}
-
 int main() {
   signal(SIGPIPE, SIG_IGN);
 
   int server_fd = open_serverfd("8080");
-  set_nonblocking(server_fd);
 
   if (listen(server_fd, SOMAXCONN) < 0) {
     error("listen: %s", strerror(errno));
@@ -92,11 +80,6 @@ int main() {
   struct epoll_event events[SOMAXCONN];
   memset(events, 0, sizeof(events));
 
-  struct conn_stat *conn_stats_by_client_fd[SOMAXCONN];
-  struct conn_stat *conn_stats_by_cgi_fd[SOMAXCONN];
-  memset(conn_stats_by_client_fd, 0, sizeof(conn_stats_by_client_fd));
-  memset(conn_stats_by_cgi_fd, 0, sizeof(conn_stats_by_cgi_fd));
-
   for (;;) {
     int n = epoll_wait(epoll_fd, events, SOMAXCONN, -1);
     if (n == -1) {
@@ -106,56 +89,38 @@ int main() {
       if (events[i].events & EPOLLERR) {
         error("bad epoll event");
         exit(-1);
-      } else if (events[i].data.fd == server_fd || (events[i].events | EPOLLIN)) {
-        // server fd
-        for (;;) {
+      } else if (events[i].data.fd == server_fd) {
+        if (events[i].events & EPOLLIN) {
+          // server fd
           int client_fd =
               accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
           if (client_fd == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-              break;
-            } else {
-              log_perror("accept");
-            }
+            log_perror("accept");
           } else {
             info("client_fd: %d", client_fd);
 
-            set_nonblocking(client_fd);
             event.events = EPOLLIN;
             event.data.fd = client_fd;
             Epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event);
-            conn_stats_by_client_fd[client_fd] = conn_stat_create(client_fd, -1);
           }
         }
-        info("accept break");
       } else if (events[i].events & EPOLLIN) {
         // client fd
-        info("EPOLLIN event");
         int client_fd = events[i].data.fd;
-        struct conn_stat* stat = conn_stats_by_client_fd[client_fd];
-        int pos = 0;
 
-        for (;;) {
-          int cnt = read(client_fd, stat->req_buf + stat->req_buf_len, REQBUF - stat->req_buf_len);
-          if (cnt == -1) {
-            if (errno == EAGAIN) break;
-            else {
-              log_perror("client_fd: read");
-            }
-          }
-          else {
-            stat->req_buf_len += cnt;
-            stat->req_buf[pos] = 0;
-          }
+        info("EPOLLIN event on %d", client_fd);
+
+        Epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+
+        pthread_t p;
+        if (pthread_create(&p, NULL, handle_conn, (void *)client_fd) < 0) {
+          error("pthread");
+          exit(-1);
         }
-
-        info("raw:");
-        printf("\n%s\n", stat->req_buf);
-
-        close(client_fd);
-
-        free(stat);
-        conn_stats_by_client_fd[client_fd] = NULL;
+        if (pthread_detach(p) < 0) {
+          error("pthread");
+          exit(-1);
+        }
       }
     }
   }
